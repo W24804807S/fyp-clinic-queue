@@ -129,12 +129,23 @@
                 </div>
 
                 <!-- Call Next Button -->
-                <form action="{{ route('staff.callNext') }}" method="POST">
+                <form id="callNextForm" action="{{ route('staff.callNext') }}" method="POST">
                     @csrf
                     <button type="submit" class="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold py-3.5 px-4 rounded-xl shadow transition duration-150">
                         Call Next Patient ➔
                     </button>
                 </form>
+                <!-- Auto-Call Simulation Control -->
+                <div class="mt-4 pt-4 border-t border-slate-100 flex items-center justify-between">
+                    <div class="text-left">
+                        <p class="text-xs font-bold text-slate-700">🤖 Auto-Call Simulation</p>
+                        <p id="autoCallStatus" class="text-[11px] text-slate-400">Status: OFF</p>
+                    </div>
+                    <button type="button" id="toggleAutoCallBtn"
+                        class="text-xs font-bold px-3.5 py-1.5 rounded-lg border transition bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200">
+                        Turn ON
+                    </button>
+                </div>
             </div>
 
             <!-- Waiting Queue Table -->
@@ -224,7 +235,76 @@
                 countdownEl.textContent = secondsLeft;
             }
         }, 1000);
-    </script>
+        
+        //random service time
+        document.addEventListener('DOMContentLoaded', function () {
+            const MIN_SEC = 180;
+            const MAX_SEC = 600;
 
+            const hasActivity = {{ ($currentlyServing || $waitingQueues->count() > 0) ? 'true' : 'false' }};
+
+            const toggleBtn = document.getElementById('toggleAutoCallBtn');
+            const statusText = document.getElementById('autoCallStatus');
+            const callNextForm = document.getElementById('callNextForm');
+
+            let isEnabled = localStorage.getItem('auto_call_enabled') === 'true';
+
+            function getRandomDelayMs() {
+                const sec = Math.floor(Math.random() * (MAX_SEC - MIN_SEC + 1)) + MIN_SEC;
+                return sec * 1000;
+            }
+
+            function updateUI() {
+                if (isEnabled) {
+                    toggleBtn.textContent = 'Turn OFF';
+                    toggleBtn.className = 'text-xs font-bold px-3.5 py-1.5 rounded-lg border transition bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100';
+                } else {
+                    toggleBtn.textContent = 'Turn ON';
+                    toggleBtn.className = 'text-xs font-bold px-3.5 py-1.5 rounded-lg border transition bg-slate-100 text-slate-600 border-slate-300 hover:bg-slate-200';
+                    statusText.textContent = 'Status: OFF';
+                }
+            }
+
+            toggleBtn.addEventListener('click', function () {
+                isEnabled = !isEnabled;
+                localStorage.setItem('auto_call_enabled', isEnabled);
+                if (isEnabled && hasActivity) {
+                    localStorage.setItem('auto_call_target', Date.now() + getRandomDelayMs());
+                } else {
+                    localStorage.removeItem('auto_call_target');
+                }
+                updateUI();
+            });
+
+            updateUI();
+
+            setInterval(function () {
+                if (!isEnabled) return;
+
+                if (!hasActivity) {
+                    localStorage.removeItem('auto_call_target');
+                    statusText.textContent = 'Standby (Waiting for patients...)';
+                    return;
+                }
+
+                let targetTime = parseInt(localStorage.getItem('auto_call_target'), 10);
+                if (!targetTime || isNaN(targetTime)) {
+                    targetTime = Date.now() + getRandomDelayMs();
+                    localStorage.setItem('auto_call_target', targetTime);
+                }
+
+                const remainingSec = Math.ceil((targetTime - Date.now()) / 1000);
+
+                if (remainingSec <= 0) {
+                    localStorage.removeItem('auto_call_target');
+                    statusText.textContent = 'Calling next patient...';
+                    callNextForm.submit();
+                } else {
+                    statusText.textContent = `Next call in ${remainingSec}s (Random ${MIN_SEC}-${MAX_SEC}s)`;
+                }
+            }, 1000);
+        });
+    </script>
+    
 </body>
 </html>

@@ -16,6 +16,7 @@ Route::get('/lang/{locale}', [PatientController::class, 'switchLang'])->name('la
 Route::get('/staff/dashboard', [StaffController::class, 'dashboard'])->name('staff.dashboard');
 Route::post('/staff/call-next', [StaffController::class, 'callNext'])->name('staff.callNext');
 Route::post('/staff/upgrade/{id}', [StaffController::class, 'upgradeToPriority'])->name('staff.upgrade');
+Route::post('/staff/toggle-auto-call', [StaffController::class, 'toggleAutoCall'])->name('staff.toggleAutoCall');
 
 // Off-hours test override route
 Route::post('/staff/override-toggle', [StaffController::class, 'toggleTestOverride'])->name('staff.override.toggle');

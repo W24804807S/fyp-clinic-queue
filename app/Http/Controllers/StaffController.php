@@ -7,6 +7,7 @@ use App\Services\QueueingTheoryService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Cache;
 
 class StaffController extends Controller
 {
@@ -19,6 +20,7 @@ class StaffController extends Controller
 
     public function dashboard(Request $request)
     {
+        $this->runAutoCallIfDue();
         if (!session('staff_logged_in')) {
             return redirect()->route('staff.login');
         }
@@ -29,7 +31,7 @@ class StaffController extends Controller
         $endTime = Carbon::createFromTime(20, 0, 0);
         
         $isRealOperatingHours = $currentTime->between($startTime, $endTime);
-        $testOverrideOpen = session('test_override_open', false);
+        $testOverrideOpen = Cache::get('test_override_open', false);
         $isOperatingHours = $isRealOperatingHours || $testOverrideOpen;
 
         $waitingQueues = Queue::where('status', 'waiting')
@@ -72,16 +74,16 @@ class StaffController extends Controller
         $endTime = Carbon::createFromTime(20, 0, 0);
 
         if (!$currentTime->between($startTime, $endTime)) {
-            $currentState = session('test_override_open', false);
-            session(['test_override_open' => !$currentState]);
+            $currentState = Cache::get('test_override_open', false);
+            Cache::put('test_override_open', !$currentState, now()->addHours(12));
         }
 
         return redirect()->route('staff.dashboard')->with('success', 'Off-hours test mode updated.');
     }
 
-    public function callNext()
+    public function callNext($isAuto = false)
     {
-        if (!session('staff_logged_in')) {
+        if (!$isAuto && !session('staff_logged_in')) {
             return redirect()->route('staff.login');
         }
         $now = Carbon::now();
@@ -151,5 +153,50 @@ class StaffController extends Controller
     {
         session()->forget('staff_logged_in');
         return redirect()->route('staff.login');
+    }
+
+    // 1. 切換後端全自動叫號開關
+    public function toggleAutoCall()
+    {
+        $enabled = !Cache::get('auto_call_enabled', false);
+        Cache::put('auto_call_enabled', $enabled, now()->addHours(24));
+
+        if ($enabled) {
+            // 開啟時設定第一次隨機倒數 (180~600秒)
+            Cache::put('auto_call_next_at', now()->addSeconds(rand(180, 600))->timestamp, now()->addHours(24));
+        } else {
+            Cache::forget('auto_call_next_at');
+        }
+
+        return back();
+    }
+
+    // 2. 檢查時間是否到達，到了就自動叫下一位
+    public function runAutoCallIfDue()
+    {
+        if (!Cache::get('auto_call_enabled', false)) {
+            return;
+        }
+
+        // 檢查目前有沒有正在看診或等待中的病人
+        $hasActivity = \App\Models\Queue::whereIn('status', ['serving', 'waiting'])->exists();
+        if (!$hasActivity) {
+            Cache::forget('auto_call_next_at');
+            return;
+        }
+
+        $nextAt = Cache::get('auto_call_next_at');
+
+        // 如果剛有新病人取號、還沒排定時間，就設定下一次叫號時間
+        if (!$nextAt) {
+            Cache::put('auto_call_next_at', now()->addSeconds(rand(180, 600))->timestamp, now()->addHours(24));
+            return;
+        }
+
+        // 時間到了！先更新下一次時間（防止多人同時刷新重複叫號），再執行叫號
+        if (now()->timestamp >= $nextAt) {
+            Cache::put('auto_call_next_at', now()->addSeconds(rand(180, 600))->timestamp, now()->addHours(24));
+            $this->callNext(true);
+        }
     }
 }

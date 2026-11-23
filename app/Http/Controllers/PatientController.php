@@ -7,6 +7,7 @@ use App\Services\QueueingTheoryService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Cache;
 
 class PatientController extends Controller
 {
@@ -27,6 +28,7 @@ class PatientController extends Controller
 
     public function index()
     {
+        app(\App\Http\Controllers\StaffController::class)->runAutoCallIfDue();
         App::setLocale(session('locale', 'en'));
         
         $now = Carbon::now();
@@ -34,7 +36,7 @@ class PatientController extends Controller
         $endTime = Carbon::createFromTime(20, 0, 0);
         
         // Allow operating between 08:00 - 20:00, or when staff enables off-hours test override
-        $isOperatingHours = $now->between($startTime, $endTime) || session('test_override_open', false);
+        $isOperatingHours = $now->between($startTime, $endTime) || Cache::get('test_override_open', false);
 
         $currentlyServing = Queue::where('status', 'serving')->first();
         $waitingCount = Queue::where('status', 'waiting')->count();
@@ -50,7 +52,7 @@ class PatientController extends Controller
         $startTime = Carbon::createFromTime(8, 0, 0);
         $endTime = Carbon::createFromTime(20, 0, 0);
         
-        $isOperatingHours = $now->between($startTime, $endTime) || session('test_override_open', false);
+        $isOperatingHours = $now->between($startTime, $endTime) || Cache::get('test_override_open', false);
         
         if (!$isOperatingHours) {
             return redirect()->route('patient.index')->with('error', 'Clinic is currently closed. Queue token generation is only available between 08:00 and 20:00.');
@@ -80,6 +82,7 @@ class PatientController extends Controller
 
     public function checkStatus($id)
     {
+        app(\App\Http\Controllers\StaffController::class)->runAutoCallIfDue();
         App::setLocale(session('locale', 'en'));
         $queue = Queue::findOrFail($id);
         $currentlyServing = Queue::where('status', 'serving')->first();

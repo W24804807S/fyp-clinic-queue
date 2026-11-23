@@ -55,7 +55,7 @@
                         System time ({{ $currentTime->format('H:i:s') }}) is outside standard operating hours (08:00 - 20:00). Toggle override to test token generation.
                     </p>
                 </div>
-                <form action="{{ route('staff.toggleOverride') }}" method="POST">
+                <<form action="{{ route('staff.override.toggle') }}" method="POST">
                     @csrf
                     @if($testOverrideOpen)
                         <button type="submit"

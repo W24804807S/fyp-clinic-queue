@@ -158,6 +158,9 @@ class StaffController extends Controller
     // 1. 切換後端全自動叫號開關
     public function toggleAutoCall()
     {
+        if (!session('staff_logged_in')) {
+        return redirect()->route('staff.login');
+        }
         $enabled = !Cache::get('auto_call_enabled', false);
         Cache::put('auto_call_enabled', $enabled, now()->addHours(24));
 
